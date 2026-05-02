@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -28,11 +29,16 @@ app.add_middleware(
 
 app.include_router(predict.router, prefix="/api")
 
-
 @app.get("/")
 def root():
-    return {"status": "Python inference server running", "port": 8000}
+    return {"status": "Python inference server running"}
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# ✅ ADD THIS - For production server
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
