@@ -1,0 +1,3 @@
+Place your two .pth files here:
+  - efficientnet_brain_tumor_best.pth
+  - unet_brain_segmentation.pth
