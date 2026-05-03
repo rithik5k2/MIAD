@@ -6,6 +6,7 @@ from torchvision import models
 from utils.unet import UNet
 import requests
 from pathlib import Path
+import gc
 
 # ── Globals ──────────────────────────────────────────────────────
 clf_model = None
@@ -35,17 +36,12 @@ def download_file(url, dest_path):
     print(f"   This may take a few minutes...")
     
     try:
-        # Stream download with progress
         response = requests.get(url, stream=True)
         response.raise_for_status()
         
-        # Get file size
         total_size = int(response.headers.get('content-length', 0))
-        
-        # Create directory if it doesn't exist
         Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # Download with progress bar
         with open(dest_path, 'wb') as f:
             if total_size == 0:
                 f.write(response.content)
@@ -54,7 +50,6 @@ def download_file(url, dest_path):
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
                     downloaded += len(chunk)
-                    # Print progress every 10%
                     progress = int(100 * downloaded / total_size)
                     if progress % 10 == 0:
                         print(f"   Progress: {progress}%", end='\r')
@@ -68,6 +63,10 @@ def download_file(url, dest_path):
 
 def load_models():
     global clf_model, seg_model, device
+    
+    # Force CPU only to save memory (CUDA libraries take extra RAM)
+    device = torch.device("cpu")
+    print(f"[model_loader] Using device: {device} (forced CPU for memory efficiency)")
     
     # Create weights directory if it doesn't exist
     Path(WEIGHTS_DIR).mkdir(parents=True, exist_ok=True)
@@ -83,9 +82,6 @@ def load_models():
         if not download_file(SEG_MODEL_URL, SEG_MODEL_PATH):
             raise FileNotFoundError(f"Failed to download segmentation weights from {SEG_MODEL_URL}")
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[model_loader] Using device: {device}")
-
     # ── 1. Classification — EfficientNetB0 ───────────────────────
     print("[model_loader] Loading classifier...")
     clf = models.efficientnet_b0(weights=None)
@@ -97,7 +93,10 @@ def load_models():
     clf.to(device).eval()
     clf_model = clf
     print("[model_loader] ✅ Classifier ready.")
-
+    
+    # Force garbage collection to free memory
+    gc.collect()
+    
     # ── 2. Segmentation — UNet ────────────────────────────────────
     print("[model_loader] Loading segmenter...")
     seg = UNet(in_channels=3, out_channels=1)
@@ -105,6 +104,9 @@ def load_models():
     seg.to(device).eval()
     seg_model = seg
     print("[model_loader] ✅ Segmenter ready.")
+    
+    # Final memory cleanup
+    gc.collect()
 
 
 def get_clf_model():
