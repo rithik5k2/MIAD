@@ -8,6 +8,11 @@ import requests
 from pathlib import Path
 import gc
 
+# ── Memory Optimization: Reduce threads ──
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["TORCH_NUM_THREADS"] = "1"
+
 # ── Globals ──────────────────────────────────────────────────────
 clf_model = None
 seg_model = None
@@ -64,7 +69,7 @@ def download_file(url, dest_path):
 def load_models():
     global clf_model, seg_model, device
     
-    # Force CPU only to save memory (CUDA libraries take extra RAM)
+    # ── Memory Optimization: Force CPU only ──
     device = torch.device("cpu")
     print(f"[model_loader] Using device: {device} (forced CPU for memory efficiency)")
     
@@ -73,16 +78,16 @@ def load_models():
     
     # Download models if they don't exist
     if not os.path.exists(CLF_MODEL_PATH):
-        print(f"[model_loader] Classifier weights not found locally. Downloading...")
+        print(f"[model_loader] Classifier weights not found. Downloading...")
         if not download_file(CLF_MODEL_URL, CLF_MODEL_PATH):
-            raise FileNotFoundError(f"Failed to download classifier weights from {CLF_MODEL_URL}")
+            raise FileNotFoundError(f"Failed to download classifier weights")
     
     if not os.path.exists(SEG_MODEL_PATH):
-        print(f"[model_loader] Segmentation weights not found locally. Downloading...")
+        print(f"[model_loader] Segmentation weights not found. Downloading...")
         if not download_file(SEG_MODEL_URL, SEG_MODEL_PATH):
-            raise FileNotFoundError(f"Failed to download segmentation weights from {SEG_MODEL_URL}")
+            raise FileNotFoundError(f"Failed to download segmentation weights")
     
-    # ── 1. Classification — EfficientNetB0 ───────────────────────
+    # ── 1. Classification Model ──
     print("[model_loader] Loading classifier...")
     clf = models.efficientnet_b0(weights=None)
     clf.classifier = nn.Sequential(
@@ -94,10 +99,10 @@ def load_models():
     clf_model = clf
     print("[model_loader] ✅ Classifier ready.")
     
-    # Force garbage collection to free memory
+    # ── Memory Cleanup between models ──
     gc.collect()
     
-    # ── 2. Segmentation — UNet ────────────────────────────────────
+    # ── 2. Segmentation Model ──
     print("[model_loader] Loading segmenter...")
     seg = UNet(in_channels=3, out_channels=1)
     seg.load_state_dict(torch.load(SEG_MODEL_PATH, map_location=device))
@@ -105,7 +110,7 @@ def load_models():
     seg_model = seg
     print("[model_loader] ✅ Segmenter ready.")
     
-    # Final memory cleanup
+    # Final cleanup
     gc.collect()
 
 
